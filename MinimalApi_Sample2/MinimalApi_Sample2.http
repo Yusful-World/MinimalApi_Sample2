@@ -1,0 +1,26 @@
+@MinimalApi_Sample2_HostAddress = https://localhost:7210
+
+
+### WeatherForecast
+GET {{MinimalApi_Sample2_HostAddress}}/weatherforecast/
+Accept: application/json
+
+### Environment Message
+
+GET {{MinimalApi_Sample2_HostAddress}}/message/
+Accept: application/json
+
+### User - Get all
+
+GET {{MinimalApi_Sample2_HostAddress}}/users/
+Accept: application/json
+
+### User - Create
+
+POST {{MinimalApi_Sample2_HostAddress}}/users/
+Content-Type: application/json
+
+{
+  "name": "Oshioriamhe",
+  "email": "oshios@example.com"
+}
