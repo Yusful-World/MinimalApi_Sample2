@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using MinimalApi_Sample2.Data;
 using MinimalApi_Sample2.Models;
@@ -49,18 +50,43 @@ app.MapGet("/weatherforecast", () =>
 var message = builder.Configuration.GetValue<string>("message");
 app.MapGet("/message", () => message);
 
+
+
+
 app.MapGet("/users", async (ApplicationDbContext context) =>
 {
     var users = await context.Users.ToListAsync();
+    
     return TypedResults.Ok(users);
 });
+
+
+app.MapGet("/users/{id:int}", async Task<Results<Ok<User>, NotFound<string>>> (int id, ApplicationDbContext context) =>
+{
+    var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id);
+
+    if (user == null)
+    {
+        return TypedResults.NotFound("user does not exist");
+    }
+
+    return TypedResults.Ok(user);
+
+}).WithName("GetUser");
+
 
 app.MapPost("/users", async (User user, ApplicationDbContext context) =>
 {
     context.Add(user);
     await context.SaveChangesAsync();
+    
     return TypedResults.Created($"/users/{user.Id}", user);
-});
+
+    //OR
+    //return TypedResults.CreatedAtRoute(user, "GetUser", new { id = user.Id });
+}).WithName("CreateUser");
+
+
 
 app.Run();
 
