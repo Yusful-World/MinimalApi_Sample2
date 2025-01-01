@@ -87,6 +87,37 @@ app.MapPost("/users", async (User user, ApplicationDbContext context) =>
 }).WithName("CreateUser");
 
 
+app.MapPut("/users/{id:int}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>> (int id, ApplicationDbContext context, User user) =>
+{
+    if (id != user.Id)
+    {
+        return TypedResults.BadRequest("id does not match any user");
+    }
+
+    var existingUser = await context.Users.AnyAsync(u => u.Id == id);
+    if ( !existingUser )
+    {
+        return TypedResults.NotFound("user does not exist");
+    }
+
+    context.Update(user);
+    await context.SaveChangesAsync();
+    return TypedResults.NoContent();
+});
+
+app.MapDelete("/users/{id:int}", async Task<Results<NotFound<string>, NoContent>> (int id, ApplicationDbContext context) =>
+{
+    var deletedRecord = await context.Users.Where(u => u.Id == id).ExecuteDeleteAsync();
+
+    if (deletedRecord == 0)
+    {
+        return TypedResults.NotFound("user does not exist");
+    }
+
+    return TypedResults.NoContent();
+});
+
+
 
 app.Run();
 

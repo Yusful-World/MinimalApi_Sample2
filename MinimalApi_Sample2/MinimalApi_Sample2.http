@@ -36,3 +36,18 @@ Content-Type: application/json
   "name": "Oshioriamhe",
   "email": "oshios@example.com"
 }
+
+### User - Update
+
+PUT {{MinimalApi_Sample2_HostAddress}}/users/2
+Content-Type: application/json
+{
+  "id": 2,
+  "name": "Abdullahi",
+  "email": "abdullahi@example.com"
+}
+
+### User - Delete
+
+DELETE {{MinimalApi_Sample2_HostAddress}}/users/3
+Content-Type: application/json
