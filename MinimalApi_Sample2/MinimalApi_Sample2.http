@@ -15,6 +15,18 @@ Accept: application/json
 GET {{MinimalApi_Sample2_HostAddress}}/users/
 Accept: application/json
 
+
+### Get User - Existing
+
+GET {{MinimalApi_Sample2_HostAddress}}/users/1
+Accept: application/json
+
+### Get User - Non-existing
+
+GET {{MinimalApi_Sample2_HostAddress}}/users/5
+Accept: application/json
+
+
 ### User - Create
 
 POST {{MinimalApi_Sample2_HostAddress}}/users/
