@@ -33,18 +33,18 @@ POST {{MinimalApi_Sample2_HostAddress}}/users/
 Content-Type: application/json
 
 {
-  "name": "Oshioriamhe",
-  "email": "oshios@example.com"
+  "name": "Bola",
+  "email": "bola@example.com"
 }
 
 ### User - Update
 
-PUT {{MinimalApi_Sample2_HostAddress}}/users/2
+PUT {{MinimalApi_Sample2_HostAddress}}/users/5
 Content-Type: application/json
 {
-  "id": 2,
-  "name": "Abdullahi",
-  "email": "abdullahi@example.com"
+  "id": 5,
+  "name": "Oshioriamhe",
+  "email": "oshios@example.com"
 }
 
 ### User - Delete
