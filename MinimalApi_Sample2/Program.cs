@@ -8,7 +8,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddOutputCache();
+//builder.Services.AddOutputCache();
+
+builder.Services.AddStackExchangeRedisOutputCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("redis");
+});
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer("name=DefaultConnection")
@@ -64,7 +69,7 @@ app.MapGet("/users", async (ApplicationDbContext context) =>
     var users = await context.Users.ToListAsync();
     
     return TypedResults.Ok(users);
-}).CacheOutput(c => c.Expire(TimeSpan.FromSeconds(60)).Tag("Get-users"));
+}).CacheOutput(c => c.Expire(TimeSpan.FromSeconds(120)).Tag("Get-users"));
 
 
 app.MapGet("/users/{id:int}", async Task<Results<Ok<User>, NotFound<string>>> (int id, ApplicationDbContext context) =>
