@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.EntityFrameworkCore;
 using MinimalApi_Sample2.Data;
 using MinimalApi_Sample2.Models;
@@ -6,6 +7,9 @@ using MinimalApi_Sample2.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+
+builder.Services.AddOutputCache();
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer("name=DefaultConnection")
 );
@@ -26,6 +30,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseOutputCache();
 
 var summaries = new[]
 {
@@ -58,7 +64,7 @@ app.MapGet("/users", async (ApplicationDbContext context) =>
     var users = await context.Users.ToListAsync();
     
     return TypedResults.Ok(users);
-});
+}).CacheOutput(c => c.Expire(TimeSpan.FromSeconds(60)).Tag("Get-users"));
 
 
 app.MapGet("/users/{id:int}", async Task<Results<Ok<User>, NotFound<string>>> (int id, ApplicationDbContext context) =>
@@ -75,10 +81,11 @@ app.MapGet("/users/{id:int}", async Task<Results<Ok<User>, NotFound<string>>> (i
 }).WithName("GetUser");
 
 
-app.MapPost("/users", async (User user, ApplicationDbContext context) =>
+app.MapPost("/users", async (User user, ApplicationDbContext context, IOutputCacheStore outputCacheStore) =>
 {
     context.Add(user);
     await context.SaveChangesAsync();
+    await outputCacheStore.EvictByTagAsync("Get-users", default);
     
     return TypedResults.Created($"/users/{user.Id}", user);
 
@@ -87,7 +94,7 @@ app.MapPost("/users", async (User user, ApplicationDbContext context) =>
 }).WithName("CreateUser");
 
 
-app.MapPut("/users/{id:int}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>> (int id, ApplicationDbContext context, User user) =>
+app.MapPut("/users/{id:int}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>> (int id, ApplicationDbContext context, User user, IOutputCacheStore outputCacheStore) =>
 {
     if (id != user.Id)
     {
@@ -102,10 +109,13 @@ app.MapPut("/users/{id:int}", async Task<Results<BadRequest<string>, NotFound<st
 
     context.Update(user);
     await context.SaveChangesAsync();
+    await outputCacheStore.EvictByTagAsync("Get-users", default);
+
+
     return TypedResults.NoContent();
 });
 
-app.MapDelete("/users/{id:int}", async Task<Results<NotFound<string>, NoContent>> (int id, ApplicationDbContext context) =>
+app.MapDelete("/users/{id:int}", async Task<Results<NotFound<string>, NoContent>> (int id, ApplicationDbContext context, IOutputCacheStore outputCacheStore) =>
 {
     var deletedRecord = await context.Users.Where(u => u.Id == id).ExecuteDeleteAsync();
 
@@ -113,6 +123,8 @@ app.MapDelete("/users/{id:int}", async Task<Results<NotFound<string>, NoContent>
     {
         return TypedResults.NotFound("user does not exist");
     }
+
+    await outputCacheStore.EvictByTagAsync("Get-users", default);
 
     return TypedResults.NoContent();
 });
