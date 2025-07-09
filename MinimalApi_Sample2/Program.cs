@@ -15,6 +15,7 @@ using MinimalApi_Sample2.Models;
 using MinimalApi_Sample2.Services;
 using MinimalApi_Sample2.Services.IServices;
 using System.Text;
+using System.Xml;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -209,20 +210,19 @@ app.MapPost("/login", async (
 
 
 app.MapPatch("/users/{id}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>>
-    (string id, ApplicationDbContext context, User user, IOutputCacheStore outputCacheStore) =>
+    (Guid id, ApplicationDbContext context, UpdateUserDto updateDto, IOutputCacheStore outputCacheStore) =>
 {
-    if (id != user.Id)
+    var existingUser = await context.Users.FindAsync(id);
+    if (existingUser == null)
     {
         return TypedResults.BadRequest("id does not match any user");
     }
 
-    var existingUser = await context.Users.AnyAsync(u => u.Id == id);
-    if (!existingUser)
-    {
-        return TypedResults.NotFound("user does not exist");
-    }
-
-    context.Update(user);
+    existingUser.FirstName = updateDto.FirstName;
+    existingUser.LastName = updateDto.LastName;
+    existingUser.PhoneNumber = updateDto.PhoneNumber;
+    existingUser.Email = updateDto.Email;
+    
     await context.SaveChangesAsync();
     //await outputCacheStore.EvictByTagAsync("Get-users", default);
 
