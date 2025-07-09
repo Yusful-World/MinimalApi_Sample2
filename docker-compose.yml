@@ -1,0 +1,6 @@
+services:
+  minimalapi_sample2:
+    image: ${DOCKER_REGISTRY-}minimalapisample2
+    build:
+      context: .
+      dockerfile: MinimalApi_Sample2\Dockerfile

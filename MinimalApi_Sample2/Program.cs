@@ -1,14 +1,26 @@
+using Azure.Core;
+using Google.Protobuf.WellKnownTypes;
+using Grpc.Core;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi.Writers;
 using MinimalApi_Sample2.Data;
+using MinimalApi_Sample2.Dtos;
 using MinimalApi_Sample2.Models;
+using MinimalApi_Sample2.Services;
+using MinimalApi_Sample2.Services.IServices;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-//builder.Services.AddOutputCache();
+builder.Services.AddOutputCache();
 
 builder.Services.AddStackExchangeRedisOutputCache(options =>
 {
@@ -19,13 +31,104 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer("name=DefaultConnection")
 );
 
+builder.Services.AddIdentity<User, IdentityRole>()
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddDefaultTokenProviders();
+
+builder.Services.AddScoped<IUserAccountService, UserAccountService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddGrpc();
+
+
 
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(option =>
+{
+    option.SwaggerDoc("v1", new OpenApiInfo { Title = "Demo Auth Service", Version = "v1" });
+    option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme()
+    {
+        Name = "Authorization",
+        Scheme = "Bearer",
+        Type = SecuritySchemeType.ApiKey,
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "JWT Authorization header using the Bearer scheme. " +
+                     "\r\n\r\n Enter 'Bearer' [space] and then your token in the text input below. " +
+                     "\r\n\r\n Example: \"Bearer YqNHJIiokdjeopDlkw\"",
+    });
+    option.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[]{}
 
+        }
+    });
+});
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme =
+    options.DefaultChallengeScheme =
+    options.DefaultForbidScheme =
+    options.DefaultScheme =
+    options.DefaultSignInScheme =
+    options.DefaultSignOutScheme = JwtBearerDefaults.AuthenticationScheme;
+}).AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.FromMinutes(10),
+        IssuerSigningKey = new SymmetricSecurityKey(
+            System.Text.Encoding.UTF8.GetBytes(builder.Configuration["JWT:SigningKey"])
+        )
+    };
+    //options.Events = new JwtBearerEvents
+    //{
+    //    OnMessageReceived = context =>
+    //    {
+    //        StringValue authHeader;
+    //        if (context.Request.Headers.TryGetValue("Authorization", out authHeader))
+    //        {
+    //            var accessToken = authHeader.FirstOrDefault();
+    //            if (!string.IsNullOrEmpty(accessToken) && accessToken.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+    //            {
+    //                context.Token = accessToken.Substring("Bearer ".Length).Trim();
+    //            }
+    //        }
+            
+    //        return Task.CompletedTask;
+    //    },
+    //    OnAuthenticationFailed = context =>
+    //    {
+    //        context.Response.Headers.Add("Grpc-Status", StatusCode.Unauthenticated.ToString("d"));
+    //        context.Response.Headers.Add("Grpc-Message", context.Exception.Message);
+    //        return Task.CompletedTask;
+    //    }
+    //};
+});
+
+builder.Services.AddAuthorization();
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    await UserRoleSeed.SeedRolesAsync(services);
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -34,45 +137,32 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
-app.UseOutputCache();
+app.UseAuthentication();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+app.UseAuthorization();
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 8).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+//app.UseOutputCache();
+
+app.MapGrpcService<GetUserDetails>();
+
 
 var message = builder.Configuration.GetValue<string>("message");
 app.MapGet("/message", () => message);
 
-
+app.MapGet("/", () => "User gRPC is running");
 
 
 app.MapGet("/users", async (ApplicationDbContext context) =>
 {
     var users = await context.Users.ToListAsync();
-    
+
     return TypedResults.Ok(users);
 }).CacheOutput(c => c.Expire(TimeSpan.FromSeconds(120)).Tag("Get-users"));
 
 
-app.MapGet("/users/{id:int}", async Task<Results<Ok<User>, NotFound<string>>> (int id, ApplicationDbContext context) =>
+app.MapGet("/users/{id}", async Task<Results<Ok<User>, NotFound<string>>> (string id, ApplicationDbContext context) =>
 {
     var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id);
 
@@ -86,20 +176,40 @@ app.MapGet("/users/{id:int}", async Task<Results<Ok<User>, NotFound<string>>> (i
 }).WithName("GetUser");
 
 
-app.MapPost("/users", async (User user, ApplicationDbContext context, IOutputCacheStore outputCacheStore) =>
+app.MapPost("/sign_up", async (
+    UserSignUpRequestDto userSignUpRequest, 
+    IUserAccountService userAccountService, 
+    IOutputCacheStore outputCacheStore
+) =>
 {
-    context.Add(user);
-    await context.SaveChangesAsync();
-    await outputCacheStore.EvictByTagAsync("Get-users", default);
-    
-    return TypedResults.Created($"/users/{user.Id}", user);
+    var createUser = await userAccountService.UserSignUp(userSignUpRequest);
 
-    //OR
-    //return TypedResults.CreatedAtRoute(user, "GetUser", new { id = user.Id });
-}).WithName("CreateUser");
+    if (!createUser.Success)
+        return Results.BadRequest(createUser.Errors);
+
+    //await outputCacheStore.EvictByTagAsync("Get-users", default);
+
+    return TypedResults.Created($"/users/{createUser.Data.Id}", createUser.Data);
+})
+.WithName("SignUpUser");
+
+app.MapPost("/login", async (
+    UserLoginRequestDto loginRequest,
+    IUserAccountService userAccountService
+) =>
+{
+    var result = await userAccountService.UserLogIn(loginRequest);
+
+    if (!result.Success)
+        return Results.BadRequest(result.Errors);
+
+    return Results.Ok(result.Data);
+})
+.WithName("LoginUser");
 
 
-app.MapPut("/users/{id:int}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>> (int id, ApplicationDbContext context, User user, IOutputCacheStore outputCacheStore) =>
+app.MapPatch("/users/{id}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>>
+    (string id, ApplicationDbContext context, User user, IOutputCacheStore outputCacheStore) =>
 {
     if (id != user.Id)
     {
@@ -107,20 +217,20 @@ app.MapPut("/users/{id:int}", async Task<Results<BadRequest<string>, NotFound<st
     }
 
     var existingUser = await context.Users.AnyAsync(u => u.Id == id);
-    if ( !existingUser )
+    if (!existingUser)
     {
         return TypedResults.NotFound("user does not exist");
     }
 
     context.Update(user);
     await context.SaveChangesAsync();
-    await outputCacheStore.EvictByTagAsync("Get-users", default);
+    //await outputCacheStore.EvictByTagAsync("Get-users", default);
 
 
     return TypedResults.NoContent();
 });
 
-app.MapDelete("/users/{id:int}", async Task<Results<NotFound<string>, NoContent>> (int id, ApplicationDbContext context, IOutputCacheStore outputCacheStore) =>
+app.MapDelete("/users/{id}", async Task<Results<NotFound<string>, NoContent>> (string id, ApplicationDbContext context, IOutputCacheStore outputCacheStore) =>
 {
     var deletedRecord = await context.Users.Where(u => u.Id == id).ExecuteDeleteAsync();
 
@@ -129,16 +239,9 @@ app.MapDelete("/users/{id:int}", async Task<Results<NotFound<string>, NoContent>
         return TypedResults.NotFound("user does not exist");
     }
 
-    await outputCacheStore.EvictByTagAsync("Get-users", default);
+    // await outputCacheStore.EvictByTagAsync("Get-users", default);
 
     return TypedResults.NoContent();
 });
 
-
-
 app.Run();
-
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
