@@ -155,7 +155,7 @@ app.MapGet("/message", () => message);
 app.MapGet("/", () => "User gRPC is running");
 
 
-app.MapGet("/users", async (ApplicationDbContext context) =>
+app.MapGet("/get_users", async (ApplicationDbContext context) =>
 {
     var users = await context.Users.ToListAsync();
 
@@ -163,7 +163,7 @@ app.MapGet("/users", async (ApplicationDbContext context) =>
 }).CacheOutput(c => c.Expire(TimeSpan.FromSeconds(120)).Tag("Get-users"));
 
 
-app.MapGet("/users/{id}", async Task<Results<Ok<User>, NotFound<string>>> (string id, ApplicationDbContext context) =>
+app.MapGet("/get_user/{id}", async Task<Results<Ok<User>, NotFound<string>>> (string id, ApplicationDbContext context) =>
 {
     var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id);
 
@@ -209,7 +209,7 @@ app.MapPost("/login", async (
 .WithName("LoginUser");
 
 
-app.MapPatch("/users/{id}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>>
+app.MapPatch("/update_user/{id}", async Task<Results<BadRequest<string>, NotFound<string>, NoContent>>
     (Guid id, ApplicationDbContext context, UpdateUserDto updateDto, IOutputCacheStore outputCacheStore) =>
 {
     var existingUser = await context.Users.FindAsync(id);
@@ -228,9 +228,9 @@ app.MapPatch("/users/{id}", async Task<Results<BadRequest<string>, NotFound<stri
 
 
     return TypedResults.NoContent();
-});
+}).RequireAuthorization();
 
-app.MapDelete("/users/{id}", async Task<Results<NotFound<string>, NoContent>> (string id, ApplicationDbContext context, IOutputCacheStore outputCacheStore) =>
+app.MapDelete("/delete_user/{id}", async Task<Results<NotFound<string>, NoContent>> (string id, ApplicationDbContext context, IOutputCacheStore outputCacheStore) =>
 {
     var deletedRecord = await context.Users.Where(u => u.Id == id).ExecuteDeleteAsync();
 
@@ -242,6 +242,6 @@ app.MapDelete("/users/{id}", async Task<Results<NotFound<string>, NoContent>> (s
     // await outputCacheStore.EvictByTagAsync("Get-users", default);
 
     return TypedResults.NoContent();
-});
+}).RequireAuthorization();
 
 app.Run();
